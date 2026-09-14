@@ -6,11 +6,24 @@ Prints 'ok <preset>' or 'err <reason>'.
 """
 import json
 import os
+import pwd
 import shutil
 import signal
 import subprocess
 import sys
 import time
+
+try:
+    _HOME = pwd.getpwuid(os.getuid()).pw_dir
+except KeyError:
+    _HOME = os.path.expanduser("~")
+
+_ENV = dict(os.environ)
+_ENV.setdefault("PATH", "/usr/local/sbin:/usr/local/bin:/usr/bin")
+_ENV.setdefault("HOME", _HOME)
+_ENV.setdefault("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+_ENV.setdefault("DBUS_SESSION_BUS_ADDRESS",
+                "unix:path=/run/user/%d/bus" % os.getuid())
 
 STATE_DIR = os.path.expanduser("~/.local/state/bt-buds")
 CUR_FILE = os.path.join(STATE_DIR, "eq.json")
@@ -27,7 +40,7 @@ PRESETS = list(FILTERS.keys())
 
 
 def run(*args, timeout=15):
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=_ENV)
 
 
 def buds_sink():
@@ -86,7 +99,7 @@ def stop_chain():
         os.kill(old, signal.SIGTERM)
     except (OSError, ValueError):
         pass
-    time.sleep(0.5)
+    time.sleep(0.3)
     for pid in own_ffmpeg_pids():
         try:
             os.kill(pid, signal.SIGKILL)
@@ -106,14 +119,15 @@ def start_chain(afilter, target):
          "-af", afilter,
          "-f", "pulse", "-device", target, "ffmpeq-buds"],
         stdout=open(log, "ab"), stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL, start_new_session=True)
+        stdin=subprocess.DEVNULL, start_new_session=True, env=_ENV)
     os.makedirs(STATE_DIR, exist_ok=True)
     with open(PID_FILE, "w") as f:
         f.write(str(proc.pid))
-    time.sleep(3)
-    if proc.poll() is not None:
-        return False
-    return proc.pid in own_ffmpeg_pids() or proc.poll() is None
+    for _ in range(5):
+        time.sleep(0.2)
+        if proc.poll() is not None:
+            return False
+    return True
 
 
 def list_inputs():
@@ -142,7 +156,7 @@ def list_inputs():
 
 
 def pin_ffmpeg_output(target):
-    for _ in range(3):
+    for _ in range(2):
         moved = False
         for iid, sink, app, media in list_inputs():
             if media == "ffmpeq-buds" and sink != target:
@@ -153,7 +167,7 @@ def pin_ffmpeg_output(target):
                     pass
         if not moved:
             return
-        time.sleep(1)
+        time.sleep(0.5)
 
 
 def route_to_eq():

@@ -103,7 +103,7 @@ local function refresh()
             snap.lang = read_lang()
             noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py get", function(eqres)
                 local eqout = (eqres and eqres.stdout) or ""
-                local eqv = eqout:match("ok%s+(%w+)")
+                local eqv = eqout:match("ok%s+(%S+)")
                 if eqres and eqres.exitCode == 0 and eqv then
                     for i, p in ipairs(EQ_PRESETS) do
                         if p == eqv then eq_index = i break end
@@ -152,7 +152,7 @@ function onIpc(event, _payload)
         local nxt = EQ_PRESETS[(eq_index % #EQ_PRESETS) + 1]
         noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. nxt, function(result)
             local out = (result and result.stdout) or ""
-            local v = out:match("ok%s+(%w+)")
+            local v = out:match("ok%s+(%S+)")
             if result and result.exitCode == 0 and v then
                 for i, p in ipairs(EQ_PRESETS) do
                     if p == v then eq_index = i break end
@@ -166,7 +166,7 @@ function onIpc(event, _payload)
         local want = (_payload == "more_bass" or _payload == "boost_vocals" or _payload == "more_highs") and _payload or "normal"
         noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. want, function(result)
             local out = (result and result.stdout) or ""
-            local v = out:match("ok%s+(%w+)")
+            local v = out:match("ok%s+(%S+)")
             if result and result.exitCode == 0 and v then
                 for i, p in ipairs(EQ_PRESETS) do
                     if p == v then eq_index = i break end
