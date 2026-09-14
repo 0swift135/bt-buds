@@ -1,0 +1,36 @@
+id = "jswift/bt-buds"
+name = "BT Buds"
+version = "0.1.0"
+plugin_api = 21
+author = "jswift"
+license = "MIT"
+icon = "bluetooth"
+description = "Bluetooth headset on the bar: connection, codec, click actions."
+tags = ["bluetooth", "audio", "bar"]
+
+[[setting]]
+key = "language"
+type = "select"
+default = "auto"
+label_key = "settings.language.label"
+options = [
+  { value = "auto", label_key = "settings.language.options.auto" },
+  { value = "en", label_key = "settings.language.options.en" },
+  { value = "ru", label_key = "settings.language.options.ru" },
+]
+
+[[widget]]
+id = "widget"
+entry = "widget.luau"
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+open_near_click = true
+placement = "floating"
+width = 380
+height = 600
+
+[[service]]
+id = "service"
+entry = "service.luau"
