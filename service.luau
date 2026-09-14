@@ -30,7 +30,7 @@ local function play_sound(name)
     os.execute("ffplay -nodisp -autoexit -v 0 /usr/share/sounds/freedesktop/stereo/" .. name .. ".oga >/dev/null 2>&1 &")
 end
 
-local snap = { connected = false, codec = "", mac = "", mode = "off", bat = "", bat_l = -1, bat_r = -1, bat_c = -1, lang = "auto" }
+local snap = { connected = false, codec = "", mac = "", mode = "off", bat = "", bat_l = -1, bat_r = -1, bat_c = -1, lang = "auto", eq_preset = "normal" }
 
 local function publish()
     noctalia.state.set(SVC_STATE, {
@@ -101,8 +101,18 @@ local function refresh()
                 if v == "anc" or v == "transparency" or v == "off" then snap.mode = v end
             end
             snap.lang = read_lang()
-            publish()
-            refresh_battery()
+            noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py get", function(eqres)
+                local eqout = (eqres and eqres.stdout) or ""
+                local eqv = eqout:match("ok%s+(%w+)")
+                if eqres and eqres.exitCode == 0 and eqv then
+                    for i, p in ipairs(EQ_PRESETS) do
+                        if p == eqv then eq_index = i break end
+                    end
+                    snap.eq_preset = eqv
+                end
+                publish()
+                refresh_battery()
+            end)
         end
     )
 end
