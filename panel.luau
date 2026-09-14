@@ -171,22 +171,24 @@ local function render()
         end
         table.insert(body, ui.column({ gap = 3 }, {
             ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
-            ui.select({
-                key = "codec_select",
-                options = codecOpts,
-                selectedIndex = codecIndex,
-                onChange = function(idx)
-                    local n = math.floor(tonumber(idx) or 0) + 1
-                    if codecOpts[n] then
-                        dispatch_ipc("set_codec", codecOpts[n])
-                    end
-                end,
-            }),
-            ui.button({
-                glyph = "dot",
-                variant = "ghost",
-                tooltip = tr("panel.equalizer") .. ": " .. (st.eq_preset or "-"),
-                onClick = function() dispatch_ipc("cycle_eq") end,
+            ui.row({ align = "center", gap = 8 }, {
+                ui.select({
+                    key = "codec_select",
+                    options = codecOpts,
+                    selectedIndex = codecIndex,
+                    onChange = function(idx)
+                        local n = math.floor(tonumber(idx) or 0) + 1
+                        if codecOpts[n] then
+                            dispatch_ipc("set_codec", codecOpts[n])
+                        end
+                    end,
+                }),
+                ui.button({
+                    glyph = "dot",
+                    variant = "ghost",
+                    tooltip = tr("panel.equalizer") .. ": " .. (st.eq_preset or "-"),
+                    onClick = function() dispatch_ipc("cycle_eq") end,
+                }),
             }),
         }))
     else
