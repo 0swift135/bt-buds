@@ -184,7 +184,7 @@ local function render()
                 ui.row({ align = "center", gap = 4 }, {
                     ui.image({
                         path = "icons/codec-" .. (st.codec ~= "" and st.codec or "sbc") .. iconSuffix(),
-                        width = 16,
+                        width = 28,
                         height = 16,
                         fit = "contain",
                     }),
