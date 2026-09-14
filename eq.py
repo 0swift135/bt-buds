@@ -171,7 +171,11 @@ def main(argv):
         try:
             r = run("pactl", "load-module", "module-null-sink",
                     "sink_name=" + EQ_SINK,
-                    "sink_properties=device.description=BudsEQ")
+                    "sink_properties=device.description=BudsEQ",
+                    "fragment_size=960",
+                    "fragments=2",
+                    "rate=48000",
+                    "channels=2")
             if r.returncode != 0:
                 print("err eq-sink")
                 return 5
@@ -185,17 +189,25 @@ def main(argv):
     with open(os.path.join(STATE_DIR, "eq-ffmpeg.log"), "ab") as log:
         proc = subprocess.Popen(
             ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-fflags", "nobuffer",
+             "-probesize", "32",
+             "-analyzeduration", "0",
+             "-thread_queue_size", "64",
              "-f", "pulse", "-i", EQ_SINK + ".monitor",
              "-af", FILTERS[name],
+             "-ar", "48000",
+             "-ac", "2",
+             "-flags", "low_delay",
+             "-fflags", "nobuffer",
              "-f", "pulse", "-device", target, "ffmpeq-buds"],
             stdout=log, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, start_new_session=True, env=_ENV)
     with open(PID_FILE, "w") as f:
         f.write(str(proc.pid))
 
-    # wait (<=1s) until ffmpeg's input shows up in the graph
+    # wait (<=0.5s) until ffmpeg's input shows up in the graph
     seen = False
-    for _ in range(10):
+    for _ in range(5):
         time.sleep(0.1)
         if proc.poll() is not None:
             print("err ffmpeg-start")
