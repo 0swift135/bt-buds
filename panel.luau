@@ -185,7 +185,7 @@ local function render()
             ui.button({
                 glyph = "dot",
                 variant = "ghost",
-                tooltip = st.eq_preset or tr("panel.equalizer"),
+                tooltip = tr("panel.equalizer") .. ": " .. (st.eq_preset or "-"),
                 onClick = function() dispatch_ipc("cycle_eq") end,
             }),
         }))
@@ -196,7 +196,7 @@ local function render()
             ui.button({
                 glyph = "dot",
                 variant = "ghost",
-                tooltip = st.eq_preset and ("EQ: " .. st.eq_preset) or tr("panel.equalizer"),
+                tooltip = tr("panel.equalizer") .. ": " .. (st.eq_preset or "-"),
                 onClick = function() dispatch_ipc("cycle_eq") end,
             }),
         }))

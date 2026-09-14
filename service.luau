@@ -23,7 +23,11 @@ local PROFILES = {
     sbc_xq = "a2dp-sink-sbc_xq",
     aac = "a2dp-sink",
 }
-local EQ_PRESETS = { "normal", "more_bass", "boost_vocals", "more_highs" }
+local EQ_PRESETS = {
+    { name = "normal", profile = "sbc" },
+    { name = "more_bass", profile = "sbc_xq" },
+    { name = "boost_vocals", profile = "aac" },
+}
 local eq_index = 1
 
 local function play_sound(name)
@@ -59,7 +63,7 @@ end
 local function next_eq()
     eq_index = (eq_index % #EQ_PRESETS) + 1
     local preset = EQ_PRESETS[eq_index]
-    snap.eq_preset = preset
+    snap.eq_preset = preset.name
     publish()
     return preset
 end
@@ -146,8 +150,12 @@ function onIpc(event, _payload)
             refresh()
         end)
     elseif event == "cycle_eq" then
-        if not snap.connected then return end
+        if not snap.connected or snap.mac == "" then return end
         local preset = next_eq()
+        local card = "bluez_card." .. snap.mac:gsub(":", "_")
+        noctalia.runAsync("pactl set-card-profile " .. card .. " " .. PROFILES[preset.profile], function()
+            refresh()
+        end)
     elseif event == "set_mode" then
         if not snap.connected then return end
         local want = (_payload == "anc" or _payload == "transparency") and _payload or "off"
