@@ -116,15 +116,55 @@ def start_chain(afilter, target):
     return proc.pid in own_ffmpeg_pids() or proc.poll() is None
 
 
+def list_inputs():
+    """Parse `pactl list sink-inputs` -> [(id, sink, app, media)]."""
+    try:
+        out = run("pactl", "list", "sink-inputs").stdout
+    except subprocess.TimeoutExpired:
+        return []
+    items, cur = [], {}
+    for line in out.splitlines():
+        if line.startswith("Sink Input #"):
+            if cur:
+                items.append(cur)
+            cur = {"id": line.split("#")[1].strip(), "sink": "", "app": "", "media": ""}
+        elif cur is not None:
+            s = line.strip()
+            if s.startswith("Sink:"):
+                cur["sink"] = s.split(":", 1)[1].strip()
+            elif s.startswith("application.name"):
+                cur["app"] = s.split("=", 1)[1].strip().strip('"')
+            elif s.startswith("media.name"):
+                cur["media"] = s.split("=", 1)[1].strip().strip('"')
+    if cur:
+        items.append(cur)
+    return [(i["id"], i["sink"], i["app"], i["media"]) for i in items]
+
+
+def pin_ffmpeg_output(target):
+    for _ in range(3):
+        moved = False
+        for iid, sink, app, media in list_inputs():
+            if media == "ffmpeq-buds" and sink != target:
+                try:
+                    run("pactl", "move-sink-input", iid, target)
+                    moved = True
+                except subprocess.TimeoutExpired:
+                    pass
+        if not moved:
+            return
+        time.sleep(1)
+
+
 def route_to_eq():
     try:
         if run("pactl", "get-default-sink").stdout.strip() != EQ_SINK:
             run("pactl", "set-default-sink", EQ_SINK)
-        out = run("pactl", "list", "sink-inputs", "short").stdout
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[1] != EQ_SINK and "ffmpeq" not in line:
-                run("pactl", "move-sink-input", parts[0], EQ_SINK)
+        for iid, sink, app, media in list_inputs():
+            if media == "ffmpeq-buds" or app.startswith("Lavf"):
+                continue
+            if sink != EQ_SINK:
+                run("pactl", "move-sink-input", iid, EQ_SINK)
     except subprocess.TimeoutExpired:
         pass
 
@@ -162,6 +202,7 @@ def main(argv):
     if not start_chain(FILTERS[name], target):
         print("err ffmpeg-start")
         return 6
+    pin_ffmpeg_output(target)
     route_to_eq()
     save_cur(name)
     print("ok %s" % name)
