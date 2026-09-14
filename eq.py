@@ -58,6 +58,16 @@ def buds_sink(sinks_out):
     return None
 
 
+def wait_buds_sink(timeout=4.0):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        target = buds_sink(sinks_short())
+        if target:
+            return target
+        time.sleep(0.5)
+    return None
+
+
 def list_inputs():
     """Parse `pactl list sink-inputs` -> [(id, sink, app, media)]."""
     try:
@@ -150,6 +160,8 @@ def main(argv):
 
     sinks = sinks_short()
     target = buds_sink(sinks)
+    if target is None:
+        target = wait_buds_sink()
     if target is None:
         print("err no-buds")
         return 4

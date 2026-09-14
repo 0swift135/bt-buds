@@ -126,6 +126,18 @@ local function next_codec(cur)
     return CODECS[1]
 end
 
+local function rebuild_eq()
+    local cur = snap.eq_preset or "normal"
+    noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. cur, function(result)
+        local out = (result and result.stdout) or ""
+        local v = out:match("ok%s+(%S+)")
+        if result and result.exitCode == 0 and v then
+            snap.eq_preset = v
+        end
+        refresh()
+    end)
+end
+
 function onIpc(event, _payload)
     if event == "refresh" then
         refresh()
@@ -146,6 +158,7 @@ function onIpc(event, _payload)
         local card = "bluez_card." .. snap.mac:gsub(":", "_")
         noctalia.runAsync("pactl set-card-profile " .. card .. " " .. PROFILES[target], function()
             refresh()
+            rebuild_eq()
         end)
     elseif event == "cycle_eq" then
         if not snap.connected then return end
@@ -212,6 +225,7 @@ elseif event == "cycle_mode" then
         local card = "bluez_card." .. snap.mac:gsub(":", "_")
         noctalia.runAsync("pactl set-card-profile " .. card .. " " .. PROFILES[want], function()
             refresh()
+            rebuild_eq()
         end)
     end
 end
