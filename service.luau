@@ -1,5 +1,8 @@
 -- bt-buds service: headset connection + codec, tiny state.
 
+local HOME = os.getenv("HOME") or ""
+local PLUGIN_DIR = HOME .. "/.local/share/noctalia/plugins/bt-buds"
+local STATE_DIR = HOME .. "/.local/state/bt-buds"
 local SVC_STATE = "btbuds.status"
 local CODECS = { "sbc", "sbc_xq", "aac" }
 local PROFILES = {
@@ -32,7 +35,7 @@ local function publish()
 end
 
 local function read_lang()
-    local okf, content = pcall(noctalia.readFile, "/home/jswift/.local/state/bt-buds/lang")
+    local okf, content = pcall(noctalia.readFile, STATE_DIR .. "/lang")
     if okf and type(content) == "string" then
         local v = content:match("(%w+)")
         if v == "ru" or v == "en" or v == "auto" then return v end
@@ -49,7 +52,7 @@ local function next_eq()
 end
 
 local function refresh_battery()
-    noctalia.runAsync("python3 /home/jswift/.local/share/noctalia/plugins/bt-buds/battery.py 2>/dev/null",
+    noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/battery.py 2>/dev/null",
         function(result)
             local out = (result and result.stdout) or ""
             local l, r, c = out:match("(%d+)%s+(%d+)%s+(-?%d+)")
@@ -87,7 +90,7 @@ local function refresh()
                 local mac = card:match("^bluez_card%.(.*)$") or ""
                 snap.mac = mac:gsub("_", ":")
             end
-            local okf, content = pcall(noctalia.readFile, "/home/jswift/.local/state/bt-buds/mode.json")
+            local okf, content = pcall(noctalia.readFile, STATE_DIR .. "/mode.json")
             if okf and type(content) == "string" then
                 local v = content:match('"mode":%s*"(%w+)"')
                 if v == "anc" or v == "transparency" or v == "off" then snap.mode = v end
@@ -135,7 +138,7 @@ function onIpc(event, _payload)
     elseif event == "set_mode" then
         if not snap.connected then return end
         local want = (_payload == "anc" or _payload == "transparency") and _payload or "off"
-        noctalia.runAsync("python3 /home/jswift/.local/share/noctalia/plugins/bt-buds/mode.py " .. want, function(result)
+        noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/mode.py " .. want, function(result)
             local out = (result and result.stdout) or ""
             local v = out:match("(%w+)")
             if result and result.exitCode == 0 and (v == "anc" or v == "transparency" or v == "off") then
@@ -147,7 +150,7 @@ elseif event == "cycle_mode" then
         if not snap.connected then return end
         local order = { off = "anc", anc = "transparency", transparency = "off" }
         local want = order[snap.mode] or "anc"
-        noctalia.runAsync("python3 /home/jswift/.local/share/noctalia/plugins/bt-buds/mode.py " .. want, function(result)
+        noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/mode.py " .. want, function(result)
             local out = (result and result.stdout) or ""
             local v = out:match("(%w+)")
             if result and result.exitCode == 0 and (v == "anc" or v == "transparency" or v == "off") then
@@ -159,7 +162,7 @@ elseif event == "cycle_mode" then
     elseif event == "cycle_lang" then
         local cur = read_lang()
         local nxt = (cur == "auto") and "ru" or ((cur == "ru") and "en" or "auto")
-        pcall(noctalia.writeFile, "/home/jswift/.local/state/bt-buds/lang", nxt)
+        pcall(noctalia.writeFile, STATE_DIR .. "/lang", nxt)
         snap.lang = nxt
         publish()
         play_sound("message-new-instant")

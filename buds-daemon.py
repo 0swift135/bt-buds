@@ -10,7 +10,7 @@ import socket
 import sys
 import time
 
-sys.path.insert(0, "/home/jswift/.local/share/noctalia/plugins/bt-buds")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from buds_proto import (encode, extract_messages, parse_battery,
                         challenge_response)
 
