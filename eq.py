@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bt-buds EQ via EasyEffects output presets.
+"""bt-buds EQ via ffmpeg: apps -> eq_in (null sink) -> ffmpeg DSP -> buds.
 
 Usage: eq.py set <normal|more_bass|boost_vocals|more_highs> | eq.py get
 Prints 'ok <preset>' or 'err <reason>'.
@@ -7,66 +7,124 @@ Prints 'ok <preset>' or 'err <reason>'.
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
 
-PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = os.path.expanduser("~/.local/state/bt-buds")
-EE_OUT = os.path.expanduser("~/.config/easyeffects/output")
 CUR_FILE = os.path.join(STATE_DIR, "eq.json")
-PRESETS = ["normal", "more_bass", "boost_vocals", "more_highs"]
-EE_SINK = "easyeffects_sink"
+PID_FILE = os.path.join(STATE_DIR, "eq-ffmpeg.pid")
+EQ_SINK = "eq_in"
+
+FILTERS = {
+    "normal": "anull",
+    "more_bass": "bass=g=7:f=150,treble=g=1:f=8000",
+    "boost_vocals": "bass=g=-2:f=150,equalizer=f=1500:t=q:w=1:g=5,equalizer=f=4000:t=q:w=1:g=3,treble=g=1:f=10000",
+    "more_highs": "bass=g=-2:f=150,equalizer=f=1500:t=q:w=1:g=1,treble=g=6:f=6000",
+}
+PRESETS = list(FILTERS.keys())
 
 
 def run(*args, timeout=15):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
-def daemon_alive():
+def buds_sink():
     try:
-        return run("pgrep", "-f", "easyeffects --service-mode").returncode == 0
+        out = run("pactl", "list", "sinks", "short").stdout
+    except subprocess.TimeoutExpired:
+        return None
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].startswith("bluez_output."):
+            return parts[1]
+    return None
+
+
+def ensure_eq_sink():
+    try:
+        out = run("pactl", "list", "sinks", "short").stdout
     except subprocess.TimeoutExpired:
         return False
-
-
-def ensure_daemon():
-    if daemon_alive():
+    if EQ_SINK in out:
         return True
-    if shutil.which("easyeffects") is None:
-        return False
-    subprocess.Popen(["easyeffects", "--service-mode"],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(15):
-        time.sleep(1)
-        if daemon_alive():
-            break
-    else:
-        return False
     try:
-        return run("easyeffects", "-p").returncode == 0
+        r = run("pactl", "load-module", "module-null-sink",
+                "sink_name=" + EQ_SINK,
+                "sink_properties=device.description=BudsEQ")
+        return r.returncode == 0
     except subprocess.TimeoutExpired:
         return False
 
 
-def ensure_preset(name):
-    os.makedirs(EE_OUT, exist_ok=True)
-    src = os.path.join(PLUGIN_DIR, "easyeffects", "btbuds-%s.json" % name)
-    dst = os.path.join(EE_OUT, "btbuds-%s.json" % name)
-    if os.path.exists(src):
-        shutil.copyfile(src, dst)
-    return dst if os.path.exists(dst) else None
+def own_ffmpeg_pids():
+    found = []
+    me = os.getpid()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == me:
+            continue
+        try:
+            with open("/proc/%s/cmdline" % pid, "rb") as f:
+                cmd = f.read().replace(b"\0", b" ").decode()
+        except (OSError, ValueError):
+            continue
+        if "ffmpeq-buds" in cmd and "eq.py" not in cmd:
+            found.append(int(pid))
+    return found
 
 
-def route_through_ee():
+def stop_chain():
+    for pid in own_ffmpeg_pids():
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
     try:
-        if run("pactl", "get-default-sink").stdout.strip() != EE_SINK:
-            run("pactl", "set-default-sink", EE_SINK)
+        with open(PID_FILE) as f:
+            old = int(f.read().strip())
+        os.kill(old, signal.SIGTERM)
+    except (OSError, ValueError):
+        pass
+    time.sleep(0.5)
+    for pid in own_ffmpeg_pids():
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    try:
+        os.unlink(PID_FILE)
+    except OSError:
+        pass
+
+
+def start_chain(afilter, target):
+    log = os.path.join(STATE_DIR, "eq-ffmpeg.log")
+    proc = subprocess.Popen(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error",
+         "-f", "pulse", "-i", EQ_SINK + ".monitor",
+         "-af", afilter,
+         "-f", "pulse", "-device", target, "ffmpeq-buds"],
+        stdout=open(log, "ab"), stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL, start_new_session=True)
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(PID_FILE, "w") as f:
+        f.write(str(proc.pid))
+    time.sleep(3)
+    if proc.poll() is not None:
+        return False
+    return proc.pid in own_ffmpeg_pids() or proc.poll() is None
+
+
+def route_to_eq():
+    try:
+        if run("pactl", "get-default-sink").stdout.strip() != EQ_SINK:
+            run("pactl", "set-default-sink", EQ_SINK)
         out = run("pactl", "list", "sink-inputs", "short").stdout
         for line in out.splitlines():
             parts = line.split()
-            if len(parts) >= 2 and parts[1] != EE_SINK:
-                run("pactl", "move-sink-input", parts[0], EE_SINK)
+            if len(parts) >= 2 and parts[1] != EQ_SINK and "ffmpeq" not in line:
+                run("pactl", "move-sink-input", parts[0], EQ_SINK)
     except subprocess.TimeoutExpired:
         pass
 
@@ -90,24 +148,21 @@ def main(argv):
         print("err usage: eq.py set <%s> | get" % "|".join(PRESETS))
         return 2
     name = argv[1]
-    if shutil.which("easyeffects") is None:
-        print("err no-easyeffects")
+    if shutil.which("ffmpeg") is None or shutil.which("pactl") is None:
+        print("err no-deps")
         return 3
-    if not ensure_daemon():
-        print("err daemon")
+    target = buds_sink()
+    if target is None:
+        print("err no-buds")
         return 4
-    if ensure_preset(name) is None:
-        print("err preset-file")
+    if not ensure_eq_sink():
+        print("err eq-sink")
         return 5
-    try:
-        r = run("easyeffects", "-l", "btbuds-%s" % name)
-    except subprocess.TimeoutExpired:
-        print("err load-timeout")
+    stop_chain()
+    if not start_chain(FILTERS[name], target):
+        print("err ffmpeg-start")
         return 6
-    if r.returncode != 0:
-        print("err load")
-        return 6
-    route_through_ee()
+    route_to_eq()
     save_cur(name)
     print("ok %s" % name)
     return 0
