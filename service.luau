@@ -1,6 +1,19 @@
 -- bt-buds service: headset connection + codec, tiny state.
 
-local HOME = os.getenv("HOME") or ""
+local function detect_home()
+    local ok, v = pcall(function() return os.getenv("HOME") end)
+    if ok and type(v) == "string" and v ~= "" then return v end
+    local ok2, h = pcall(function()
+        local f = io.popen("printf '%s' \"$HOME\"")
+        if not f then return nil end
+        local out = f:read("*a")
+        f:close()
+        return out
+    end)
+    if ok2 and type(h) == "string" and h ~= "" then return h end
+    return "/home/jswift"
+end
+local HOME = detect_home()
 local PLUGIN_DIR = HOME .. "/.local/share/noctalia/plugins/bt-buds"
 local STATE_DIR = HOME .. "/.local/state/bt-buds"
 local SVC_STATE = "btbuds.status"
