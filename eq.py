@@ -2,7 +2,7 @@
 """bt-buds EQ via ffmpeg: apps -> eq_in (null sink) -> ffmpeg DSP -> buds.
 
 Usage: eq.py set <normal|more_bass|boost_vocals|more_highs> | eq.py get
-Prints 'ok <preset>' or 'err <reason>'.
+Prints 'ok <preset>' or 'err <reason>'. Must finish in ~2s (caller timeout).
 """
 import json
 import os
@@ -39,42 +39,57 @@ FILTERS = {
 PRESETS = list(FILTERS.keys())
 
 
-def run(*args, timeout=15):
+def run(*args, timeout=8):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=_ENV)
 
 
-def buds_sink():
+def sinks_short():
     try:
-        out = run("pactl", "list", "sinks", "short").stdout
+        return run("pactl", "list", "sinks", "short").stdout
     except subprocess.TimeoutExpired:
-        return None
-    for line in out.splitlines():
+        return ""
+
+
+def buds_sink(sinks_out):
+    for line in sinks_out.splitlines():
         parts = line.split()
         if len(parts) >= 2 and parts[1].startswith("bluez_output."):
             return parts[1]
     return None
 
 
-def ensure_eq_sink():
+def list_inputs():
+    """Parse `pactl list sink-inputs` -> [(id, sink, app, media)]."""
     try:
-        out = run("pactl", "list", "sinks", "short").stdout
+        out = run("pactl", "list", "sink-inputs").stdout
     except subprocess.TimeoutExpired:
-        return False
-    if EQ_SINK in out:
-        return True
-    try:
-        r = run("pactl", "load-module", "module-null-sink",
-                "sink_name=" + EQ_SINK,
-                "sink_properties=device.description=BudsEQ")
-        return r.returncode == 0
-    except subprocess.TimeoutExpired:
-        return False
+        return []
+    items, cur = [], None
+    for line in out.splitlines():
+        if line.startswith("Sink Input #"):
+            if cur:
+                items.append(cur)
+            cur = {"id": line.split("#")[1].strip(), "sink": "", "app": "", "media": ""}
+        elif cur is not None:
+            s = line.strip()
+            if s.startswith("Sink:"):
+                cur["sink"] = s.split(":", 1)[1].strip()
+            elif s.startswith("application.name"):
+                cur["app"] = s.split("=", 1)[1].strip().strip('"')
+            elif s.startswith("media.name"):
+                cur["media"] = s.split("=", 1)[1].strip().strip('"')
+    if cur:
+        items.append(cur)
+    return [(i["id"], i["sink"], i["app"], i["media"]) for i in items]
 
 
 def own_ffmpeg_pids():
-    found = []
-    me = os.getpid()
-    for pid in os.listdir("/proc"):
+    found, me = [], os.getpid()
+    try:
+        pids = os.listdir("/proc")
+    except OSError:
+        return found
+    for pid in pids:
         if not pid.isdigit() or int(pid) == me:
             continue
         try:
@@ -99,7 +114,6 @@ def stop_chain():
         os.kill(old, signal.SIGTERM)
     except (OSError, ValueError):
         pass
-    time.sleep(0.3)
     for pid in own_ffmpeg_pids():
         try:
             os.kill(pid, signal.SIGKILL)
@@ -108,78 +122,6 @@ def stop_chain():
     try:
         os.unlink(PID_FILE)
     except OSError:
-        pass
-
-
-def start_chain(afilter, target):
-    log = os.path.join(STATE_DIR, "eq-ffmpeg.log")
-    proc = subprocess.Popen(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error",
-         "-f", "pulse", "-i", EQ_SINK + ".monitor",
-         "-af", afilter,
-         "-f", "pulse", "-device", target, "ffmpeq-buds"],
-        stdout=open(log, "ab"), stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL, start_new_session=True, env=_ENV)
-    os.makedirs(STATE_DIR, exist_ok=True)
-    with open(PID_FILE, "w") as f:
-        f.write(str(proc.pid))
-    for _ in range(5):
-        time.sleep(0.2)
-        if proc.poll() is not None:
-            return False
-    return True
-
-
-def list_inputs():
-    """Parse `pactl list sink-inputs` -> [(id, sink, app, media)]."""
-    try:
-        out = run("pactl", "list", "sink-inputs").stdout
-    except subprocess.TimeoutExpired:
-        return []
-    items, cur = [], {}
-    for line in out.splitlines():
-        if line.startswith("Sink Input #"):
-            if cur:
-                items.append(cur)
-            cur = {"id": line.split("#")[1].strip(), "sink": "", "app": "", "media": ""}
-        elif cur is not None:
-            s = line.strip()
-            if s.startswith("Sink:"):
-                cur["sink"] = s.split(":", 1)[1].strip()
-            elif s.startswith("application.name"):
-                cur["app"] = s.split("=", 1)[1].strip().strip('"')
-            elif s.startswith("media.name"):
-                cur["media"] = s.split("=", 1)[1].strip().strip('"')
-    if cur:
-        items.append(cur)
-    return [(i["id"], i["sink"], i["app"], i["media"]) for i in items]
-
-
-def pin_ffmpeg_output(target):
-    for _ in range(2):
-        moved = False
-        for iid, sink, app, media in list_inputs():
-            if media == "ffmpeq-buds" and sink != target:
-                try:
-                    run("pactl", "move-sink-input", iid, target)
-                    moved = True
-                except subprocess.TimeoutExpired:
-                    pass
-        if not moved:
-            return
-        time.sleep(0.5)
-
-
-def route_to_eq():
-    try:
-        if run("pactl", "get-default-sink").stdout.strip() != EQ_SINK:
-            run("pactl", "set-default-sink", EQ_SINK)
-        for iid, sink, app, media in list_inputs():
-            if media == "ffmpeq-buds" or app.startswith("Lavf"):
-                continue
-            if sink != EQ_SINK:
-                run("pactl", "move-sink-input", iid, EQ_SINK)
-    except subprocess.TimeoutExpired:
         pass
 
 
@@ -205,19 +147,68 @@ def main(argv):
     if shutil.which("ffmpeg") is None or shutil.which("pactl") is None:
         print("err no-deps")
         return 3
-    target = buds_sink()
+
+    sinks = sinks_short()
+    target = buds_sink(sinks)
     if target is None:
         print("err no-buds")
         return 4
-    if not ensure_eq_sink():
-        print("err eq-sink")
-        return 5
+    if EQ_SINK not in sinks:
+        try:
+            r = run("pactl", "load-module", "module-null-sink",
+                    "sink_name=" + EQ_SINK,
+                    "sink_properties=device.description=BudsEQ")
+            if r.returncode != 0:
+                print("err eq-sink")
+                return 5
+        except subprocess.TimeoutExpired:
+            print("err eq-sink")
+            return 5
+
     stop_chain()
-    if not start_chain(FILTERS[name], target):
+
+    os.makedirs(STATE_DIR, exist_ok=True)
+    log = open(os.path.join(STATE_DIR, "eq-ffmpeg.log"), "ab")
+    proc = subprocess.Popen(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error",
+         "-f", "pulse", "-i", EQ_SINK + ".monitor",
+         "-af", FILTERS[name],
+         "-f", "pulse", "-device", target, "ffmpeq-buds"],
+        stdout=log, stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL, start_new_session=True, env=_ENV)
+    with open(PID_FILE, "w") as f:
+        f.write(str(proc.pid))
+
+    # wait (<=1s) until ffmpeg's input shows up in the graph
+    seen = False
+    for _ in range(10):
+        time.sleep(0.1)
+        if proc.poll() is not None:
+            print("err ffmpeg-start")
+            return 6
+        for iid, sink, app, media in list_inputs():
+            if media == "ffmpeq-buds":
+                seen = True
+                break
+        if seen:
+            break
+    if not seen:
         print("err ffmpeg-start")
         return 6
-    pin_ffmpeg_output(target)
-    route_to_eq()
+
+    # single routing pass over one snapshot
+    try:
+        if run("pactl", "get-default-sink").stdout.strip() != EQ_SINK:
+            run("pactl", "set-default-sink", EQ_SINK)
+        for iid, sink, app, media in list_inputs():
+            if media == "ffmpeq-buds":
+                if sink != target:
+                    run("pactl", "move-sink-input", iid, target)
+            elif sink != EQ_SINK and not app.startswith("Lavf"):
+                run("pactl", "move-sink-input", iid, EQ_SINK)
+    except subprocess.TimeoutExpired:
+        pass
+
     save_cur(name)
     print("ok %s" % name)
     return 0
