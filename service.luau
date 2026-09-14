@@ -23,11 +23,7 @@ local PROFILES = {
     sbc_xq = "a2dp-sink-sbc_xq",
     aac = "a2dp-sink",
 }
-local EQ_PRESETS = {
-    { name = "normal", profile = "sbc" },
-    { name = "more_bass", profile = "sbc_xq" },
-    { name = "boost_vocals", profile = "aac" },
-}
+local EQ_PRESETS = { "normal", "more_bass", "boost_vocals", "more_highs" }
 local eq_index = 1
 
 local function play_sound(name)
@@ -58,14 +54,6 @@ local function read_lang()
         if v == "ru" or v == "en" or v == "auto" then return v end
     end
     return "auto"
-end
-
-local function next_eq()
-    eq_index = (eq_index % #EQ_PRESETS) + 1
-    local preset = EQ_PRESETS[eq_index]
-    snap.eq_preset = preset.name
-    publish()
-    return preset
 end
 
 local function refresh_battery()
@@ -150,11 +138,18 @@ function onIpc(event, _payload)
             refresh()
         end)
     elseif event == "cycle_eq" then
-        if not snap.connected or snap.mac == "" then return end
-        local preset = next_eq()
-        local card = "bluez_card." .. snap.mac:gsub(":", "_")
-        noctalia.runAsync("pactl set-card-profile " .. card .. " " .. PROFILES[preset.profile], function()
-            refresh()
+        if not snap.connected then return end
+        local nxt = EQ_PRESETS[(eq_index % #EQ_PRESETS) + 1]
+        noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. nxt, function(result)
+            local out = (result and result.stdout) or ""
+            local v = out:match("ok%s+(%w+)")
+            if result and result.exitCode == 0 and v then
+                for i, p in ipairs(EQ_PRESETS) do
+                    if p == v then eq_index = i break end
+                end
+                snap.eq_preset = v
+                publish()
+            end
         end)
     elseif event == "set_mode" then
         if not snap.connected then return end
