@@ -203,7 +203,15 @@ local function render()
                 }),
             }),
             ui.column({ gap = 3, flexGrow = 1 }, {
-                ui.label({ text = tr("panel.equalizer"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
+                ui.row({ align = "center", gap = 4 }, {
+                    ui.image({
+                        path = "icons/eq-" .. (st.eq_preset or "normal") .. iconSuffix(),
+                        width = 16,
+                        height = 16,
+                        fit = "contain",
+                    }),
+                    ui.label({ text = tr("panel.equalizer"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
+                }),
                 ui.select({
                     key = "eq_select_" .. (st.eq_preset or "none"),
                     options = eqLabels,
