@@ -197,7 +197,7 @@ local function render()
             ui.column({ gap = 3, flexGrow = 1 }, {
                 ui.label({ text = tr("panel.equalizer"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
                 ui.select({
-                    key = "eq_select",
+                    key = "eq_select_" .. (st.eq_preset or "none"),
                     options = eqLabels,
                     selectedIndex = eqIndex,
                     onChange = function(idx)
@@ -213,12 +213,6 @@ local function render()
         table.insert(body, ui.column({ align = "center", gap = 8, padding = 16 }, {
             ui.glyph({ name = "bluetooth-off", color = "error", size = 40 }),
             ui.label({ text = tr("panel.disconnected"), fontSize = 15, fontWeight = "bold", textAlign = "center" }),
-            ui.button({
-                glyph = "dot",
-                variant = "ghost",
-                tooltip = tr("panel.equalizer") .. ": " .. (st.eq_preset or "-"),
-                onClick = function() dispatch_ipc("cycle_eq") end,
-            }),
         }))
     end
 

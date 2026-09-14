@@ -27,7 +27,8 @@ local EQ_PRESETS = { "normal", "more_bass", "boost_vocals", "more_highs" }
 local eq_index = 1
 
 local function play_sound(name)
-    os.execute("ffplay -nodisp -autoexit -v 0 /usr/share/sounds/freedesktop/stereo/" .. name .. ".oga >/dev/null 2>&1 &")
+    -- NB: os.execute is neutered in the service sandbox; use runAsync.
+    noctalia.runAsync("ffplay -nodisp -autoexit -v 0 /usr/share/sounds/freedesktop/stereo/" .. name .. ".oga >/dev/null 2>&1 &")
 end
 
 local snap = { connected = false, codec = "", mac = "", mode = "off", bat = "", bat_l = -1, bat_r = -1, bat_c = -1, lang = "auto", eq_preset = "normal" }
@@ -56,22 +57,18 @@ local function read_lang()
     return "auto"
 end
 
-local function refresh_battery()
-    noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/battery.py 2>/dev/null",
-        function(result)
-            local out = (result and result.stdout) or ""
-            local l, r, c = out:match("(%d+)%s+(%d+)%s+(-?%d+)")
-            if result and result.exitCode == 0 and l then
-                snap.bat_l = tonumber(l) or -1
-                snap.bat_r = tonumber(r) or -1
-                snap.bat_c = tonumber(c) or -1
-                local cs = snap.bat_c >= 0 and ("Case " .. c .. "%") or "Case Closed"
-                snap.bat = "L " .. l .. "% · R " .. r .. "% · " .. cs
-                publish()
+local function apply_eq_result(out, exitCode)
+    local v = (out or ""):match("ok%s+(%S+)")
+    if exitCode == 0 and v then
+        for i, p in ipairs(EQ_PRESETS) do
+            if p == v then
+                eq_index = i
+                snap.eq_preset = v
+                return true
             end
-            -- on failure keep last known values instead of blanking
         end
-    )
+    end
+    return false
 end
 
 local function refresh()
@@ -101,18 +98,33 @@ local function refresh()
                 if v == "anc" or v == "transparency" or v == "off" then snap.mode = v end
             end
             snap.lang = read_lang()
+            -- eq state + battery are independent: fetch concurrently, publish once
+            local pending = 2
+            local function done()
+                pending = pending - 1
+                if pending <= 0 then publish() end
+            end
             noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py get", function(eqres)
-                local eqout = (eqres and eqres.stdout) or ""
-                local eqv = eqout:match("ok%s+(%S+)")
-                if eqres and eqres.exitCode == 0 and eqv then
-                    for i, p in ipairs(EQ_PRESETS) do
-                        if p == eqv then eq_index = i break end
-                    end
-                    snap.eq_preset = eqv
+                if eqres and eqres.exitCode == 0 then
+                    apply_eq_result(eqres.stdout, eqres.exitCode)
                 end
-                publish()
-                refresh_battery()
+                done()
             end)
+            noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/battery.py 2>/dev/null",
+                function(result)
+                    local out = (result and result.stdout) or ""
+                    local l, r, c = out:match("(%d+)%s+(%d+)%s+(-?%d+)")
+                    if result and result.exitCode == 0 and l then
+                        snap.bat_l = tonumber(l) or -1
+                        snap.bat_r = tonumber(r) or -1
+                        snap.bat_c = tonumber(c) or -1
+                        local cs = snap.bat_c >= 0 and ("Case " .. c .. "%") or "Case Closed"
+                        snap.bat = "L " .. l .. "% · R " .. r .. "% · " .. cs
+                    end
+                    -- on failure keep last known values instead of blanking
+                    done()
+                end
+            )
         end
     )
 end
@@ -129,11 +141,7 @@ end
 local function rebuild_eq()
     local cur = snap.eq_preset or "normal"
     noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. cur, function(result)
-        local out = (result and result.stdout) or ""
-        local v = out:match("ok%s+(%S+)")
-        if result and result.exitCode == 0 and v then
-            snap.eq_preset = v
-        end
+        if result then apply_eq_result(result.stdout, result.exitCode) end
         refresh()
     end)
 end
@@ -164,13 +172,7 @@ function onIpc(event, _payload)
         if not snap.connected then return end
         local nxt = EQ_PRESETS[(eq_index % #EQ_PRESETS) + 1]
         noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. nxt, function(result)
-            local out = (result and result.stdout) or ""
-            local v = out:match("ok%s+(%S+)")
-            if result and result.exitCode == 0 and v then
-                for i, p in ipairs(EQ_PRESETS) do
-                    if p == v then eq_index = i break end
-                end
-                snap.eq_preset = v
+            if result and apply_eq_result(result.stdout, result.exitCode) then
                 publish()
             end
         end)
@@ -178,13 +180,7 @@ function onIpc(event, _payload)
         if not snap.connected then return end
         local want = (_payload == "more_bass" or _payload == "boost_vocals" or _payload == "more_highs") and _payload or "normal"
         noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. want, function(result)
-            local out = (result and result.stdout) or ""
-            local v = out:match("ok%s+(%S+)")
-            if result and result.exitCode == 0 and v then
-                for i, p in ipairs(EQ_PRESETS) do
-                    if p == v then eq_index = i break end
-                end
-                snap.eq_preset = v
+            if result and apply_eq_result(result.stdout, result.exitCode) then
                 publish()
             end
         end)

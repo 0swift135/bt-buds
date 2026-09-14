@@ -24,6 +24,8 @@ def main():
     except socket.timeout:
         print("daemon timeout", file=sys.stderr)
         return 1
+    finally:
+        s.close()
     if resp.startswith("ok "):
         print(resp[3:])
         return 0

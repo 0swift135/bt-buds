@@ -68,15 +68,6 @@ local function barText()
     return tr("widget.name")
 end
 
-local function modeShort()
-    if snap.mode == "anc" then
-        return " ANC"
-    elseif snap.mode == "transparency" then
-        return " TR"
-    end
-    return ""
-end
-
 local function modeGlyph()
     if snap.mode == "anc" then
         return "shield-check"

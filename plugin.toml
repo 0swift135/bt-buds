@@ -1,11 +1,11 @@
 id = "jswift/bt-buds"
 name = "BT Buds"
-version = "0.1.0"
+version = "0.2.0"
 plugin_api = 21
 author = "jswift"
 license = "MIT"
 icon = "bluetooth"
-description = "Bluetooth headset on the bar: connection, codec, click actions."
+description = "Bluetooth headset on the bar: battery, ANC, codec, EQ via ffmpeg."
 tags = ["bluetooth", "audio", "bar"]
 
 [[setting]]

@@ -58,7 +58,7 @@ def buds_sink(sinks_out):
     return None
 
 
-def wait_buds_sink(timeout=4.0):
+def wait_buds_sink(timeout=3.0):
     t0 = time.time()
     while time.time() - t0 < timeout:
         target = buds_sink(sinks_short())
@@ -148,6 +148,8 @@ def main(argv):
                 name = json.load(f).get("eq", "normal")
         except (OSError, ValueError):
             name = "normal"
+        if name not in PRESETS:
+            name = "normal"
         print("ok %s" % name)
         return 0
     if len(argv) != 2 or argv[0] != "set" or argv[1] not in PRESETS:
@@ -180,14 +182,14 @@ def main(argv):
     stop_chain()
 
     os.makedirs(STATE_DIR, exist_ok=True)
-    log = open(os.path.join(STATE_DIR, "eq-ffmpeg.log"), "ab")
-    proc = subprocess.Popen(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error",
-         "-f", "pulse", "-i", EQ_SINK + ".monitor",
-         "-af", FILTERS[name],
-         "-f", "pulse", "-device", target, "ffmpeq-buds"],
-        stdout=log, stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL, start_new_session=True, env=_ENV)
+    with open(os.path.join(STATE_DIR, "eq-ffmpeg.log"), "ab") as log:
+        proc = subprocess.Popen(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-f", "pulse", "-i", EQ_SINK + ".monitor",
+             "-af", FILTERS[name],
+             "-f", "pulse", "-device", target, "ffmpeq-buds"],
+            stdout=log, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL, start_new_session=True, env=_ENV)
     with open(PID_FILE, "w") as f:
         f.write(str(proc.pid))
 

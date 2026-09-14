@@ -11,8 +11,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from buds_proto import (encode, extract_messages, parse_battery,
-                        challenge_response)
+from buds_proto import encode, extract_messages, parse_battery
 
 MAC = "78:99:87:AD:44:BA"
 CH = 29
@@ -87,19 +86,6 @@ class Buds:
                 break
         return msgs
 
-    def _wait_auth(self, timeout=6):
-        t0 = time.time()
-        while time.time() - t0 < timeout:
-            for m in self._read_msgs(2):
-                t, op = m["type"], m["opcode"]
-                if t == 0xC0 and op == 0x50:
-                    resp = challenge_response(bytes(m["payload"][1:17]))
-                    self.send(0x04, 0x50, [0x01] + list(resp))
-                elif op == 0x50:
-                    self.send(0xC4, 0x51, [0x01, 0x00])
-                    return True
-        return False
-
     def set_mode(self, mode):
         val = VALUES[mode]
         # phone-style raw frames (proven on wire); spec framing is ignored for SET
@@ -128,8 +114,36 @@ def save_mode(mode):
         json.dump({"mode": mode}, f)
 
 
+def handle(buds, cmd):
+    """Execute one client command. Returns the reply line (no newline)."""
+    if cmd[0] == "mode" and len(cmd) == 2 and cmd[1] in VALUES:
+        buds.set_mode(cmd[1])
+        save_mode(cmd[1])
+        return "ok %s" % cmd[1]
+    if cmd[0] == "battery":
+        b = buds.get_battery()
+        if b:
+            return "ok %d %d %d" % (b["left"], b["right"], b["case"])
+        return "err no-data"
+    return "err unknown"
+
+
 def main():
     os.makedirs(STATE_DIR, exist_ok=True)
+    # single instance: if someone already serves the socket, exit quietly
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(1)
+    try:
+        probe.connect(SOCK_PATH)
+        probe.sendall(b"battery\n")
+        probe.settimeout(3)
+        if probe.recv(64):
+            log("another instance is alive, exiting")
+            return 0
+    except (OSError, socket.timeout):
+        pass
+    finally:
+        probe.close()
     try:
         os.unlink(SOCK_PATH)
     except FileNotFoundError:
@@ -157,36 +171,12 @@ def main():
             if not cmd:
                 continue
             try:
-                if cmd[0] == "mode" and len(cmd) == 2 and cmd[1] in VALUES:
-                    buds.set_mode(cmd[1])
-                    save_mode(cmd[1])
-                    conn.sendall(("ok %s\n" % cmd[1]).encode())
-                elif cmd[0] == "battery":
-                    b = buds.get_battery()
-                    if b:
-                        case = b["case"]
-                        conn.sendall(("ok %d %d %d\n" % (b["left"], b["right"], case)).encode())
-                    else:
-                        conn.sendall(b"err no-data\n")
-                else:
-                    conn.sendall(b"err unknown\n")
+                conn.sendall((handle(buds, cmd) + "\n").encode())
             except (OSError, socket.timeout) as e:
                 log("buds link lost, reconnect + retry:", e)
                 try:
                     buds.connect()
-                    if cmd[0] == "mode" and len(cmd) == 2 and cmd[1] in VALUES:
-                        buds.set_mode(cmd[1])
-                        save_mode(cmd[1])
-                        conn.sendall(("ok %s\n" % cmd[1]).encode())
-                    elif cmd[0] == "battery":
-                        b = buds.get_battery()
-                        if b:
-                            case = b["case"]
-                            conn.sendall(("ok %d %d %d\n" % (b["left"], b["right"], case)).encode())
-                        else:
-                            conn.sendall(b"err no-data\n")
-                    else:
-                        conn.sendall(b"err unknown\n")
+                    conn.sendall((handle(buds, cmd) + "\n").encode())
                 except Exception as e2:
                     log("retry failed:", e2)
                     try:
