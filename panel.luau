@@ -114,7 +114,7 @@ local function render()
 
     if connected then
         table.insert(body, ui.row({ align = "center", justify = "center", padding = 0 }, {
-            ui.image({ path = "icons/buds.png", width = 208, height = 160, fit = "contain" }),
+            ui.image({ path = "icons/buds.png", width = 260, height = 200, fit = "contain" }),
         }))
 
         table.insert(body, ui.row({ align = "center", justify = "center", gap = 8, padding = 2 }, {
