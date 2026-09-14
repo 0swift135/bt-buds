@@ -196,7 +196,6 @@ elseif event == "cycle_mode" then
         snap.lang = nxt
         publish()
         play_sound("message-new-instant")
-        sound.mode_off()
     elseif event == "set_codec" then
         if not snap.connected or snap.mac == "" then return end
         local want = (_payload == "sbc_xq" or _payload == "aac" or _payload == "sbc") and _payload or "sbc"
