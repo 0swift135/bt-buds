@@ -28,8 +28,8 @@ id = "panel"
 entry = "panel.luau"
 open_near_click = true
 placement = "floating"
-width = 360
-height = 650
+width = 380
+height = 666
 
 [[service]]
 id = "service"

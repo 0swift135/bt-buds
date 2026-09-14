@@ -213,7 +213,7 @@ local function render()
         modeLabel = tr("panel.mode.transparency")
     end
 
-    panel.render(ui.column({ flexGrow = 1, gap = 4, padding = 0, width = 360, height = 650 }, {
+    panel.render(ui.column({ flexGrow = 1, gap = 4, padding = 0, width = 380, height = 666 }, {
         ui.row({ align = "center", justify = "space_between", gap = 8 }, {
             ui.glyph({ name = "bluetooth", color = "primary", size = 30 }),
             ui.column({ flexGrow = 1, gap = 2 }, {
