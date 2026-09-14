@@ -181,11 +181,23 @@ local function render()
                     end
                 end,
             }),
+            ui.button({
+                glyph = "dot",
+                variant = "ghost",
+                tooltip = st.eq_preset or tr("panel.equalizer"),
+                onClick = function() dispatch_ipc("cycle_eq") end,
+            }),
         }))
     else
         table.insert(body, ui.column({ align = "center", gap = 12, padding = 24 }, {
             ui.glyph({ name = "bluetooth-off", color = "error", size = 48 }),
             ui.label({ text = tr("panel.disconnected"), fontSize = 15, fontWeight = "bold", textAlign = "center" }),
+            ui.button({
+                glyph = "dot",
+                variant = "ghost",
+                tooltip = st.eq_preset and ("EQ: " .. st.eq_preset) or tr("panel.equalizer"),
+                onClick = function() dispatch_ipc("cycle_eq") end,
+            }),
         }))
     end
 
@@ -201,7 +213,7 @@ local function render()
         modeLabel = tr("panel.mode.transparency")
     end
 
-    panel.render(ui.column({ flexGrow = 1, gap = 4, padding = 0 }, {
+    panel.render(ui.column({ flexGrow = 1, gap = 4, padding = 0, width = 350, height = 760 }, {
         ui.row({ align = "center", justify = "space_between", gap = 8 }, {
             ui.glyph({ name = "bluetooth", color = "primary", size = 30 }),
             ui.column({ flexGrow = 1, gap = 2 }, {

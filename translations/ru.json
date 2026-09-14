@@ -10,10 +10,11 @@
       "transparency": "Прозрачность",
       "off": "Выкл"
     },
-    "codec": "Кодек",
+    "codec": "Кодеки",
     "connect": "Подключить",
     "disconnect": "Отключить",
-    "disconnected": "Отключено"
+    "disconnected": "Отключено",
+    "equalizer": "Эквалайзер"
   },
   "widget": {
     "name": "Buds 6 Lite",

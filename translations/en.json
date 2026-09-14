@@ -11,6 +11,7 @@
       "off": "Off"
     },
     "codec": "Codec",
+"equalizer": "EQ",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "disconnected": "Disconnected"

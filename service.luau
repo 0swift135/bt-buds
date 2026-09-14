@@ -7,6 +7,12 @@ local PROFILES = {
     sbc_xq = "a2dp-sink-sbc_xq",
     aac = "a2dp-sink",
 }
+local EQ_PRESETS = { "normal", "more_bass", "boost_vocals", "more_highs" }
+local eq_index = 1
+
+local function play_sound(name)
+    os.execute("ffplay -nodisp -autoexit -v 0 /usr/share/sounds/freedesktop/stereo/" .. name .. ".oga >/dev/null 2>&1 &")
+end
 
 local snap = { connected = false, codec = "", mac = "", mode = "off", bat = "", bat_l = -1, bat_r = -1, bat_c = -1, lang = "auto" }
 
@@ -21,6 +27,7 @@ local function publish()
         bat_r = snap.bat_r,
         bat_c = snap.bat_c,
         lang = snap.lang,
+        eq_preset = snap.eq_preset,
     })
 end
 
@@ -31,6 +38,14 @@ local function read_lang()
         if v == "ru" or v == "en" or v == "auto" then return v end
     end
     return "auto"
+end
+
+local function next_eq()
+    eq_index = (eq_index % #EQ_PRESETS) + 1
+    local preset = EQ_PRESETS[eq_index]
+    snap.eq_preset = preset
+    publish()
+    return preset
 end
 
 local function refresh_battery()
@@ -114,6 +129,9 @@ function onIpc(event, _payload)
         noctalia.runAsync("pactl set-card-profile " .. card .. " " .. PROFILES[target], function()
             refresh()
         end)
+    elseif event == "cycle_eq" then
+        if not snap.connected then return end
+        local preset = next_eq()
     elseif event == "set_mode" then
         if not snap.connected then return end
         local want = (_payload == "anc" or _payload == "transparency") and _payload or "off"
@@ -125,7 +143,7 @@ function onIpc(event, _payload)
                 publish()
             end
         end)
-    elseif event == "cycle_mode" then
+elseif event == "cycle_mode" then
         if not snap.connected then return end
         local order = { off = "anc", anc = "transparency", transparency = "off" }
         local want = order[snap.mode] or "anc"
@@ -135,6 +153,7 @@ function onIpc(event, _payload)
             if result and result.exitCode == 0 and (v == "anc" or v == "transparency" or v == "off") then
                 snap.mode = v
                 publish()
+                play_sound("complete")
             end
         end)
     elseif event == "cycle_lang" then
@@ -143,6 +162,8 @@ function onIpc(event, _payload)
         pcall(noctalia.writeFile, "/home/jswift/.local/state/bt-buds/lang", nxt)
         snap.lang = nxt
         publish()
+        play_sound("message-new-instant")
+        sound.mode_off()
     elseif event == "set_codec" then
         if not snap.connected or snap.mac == "" then return end
         local want = (_payload == "sbc_xq" or _payload == "aac" or _payload == "sbc") and _payload or "sbc"
