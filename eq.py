@@ -176,7 +176,7 @@ def save_cur(name):
 
 
 def main(argv):
-    if len(argv) == 2 and argv[0] == "get":
+    if len(argv) == 1 and argv[0] == "get":
         try:
             with open(CUR_FILE) as f:
                 name = json.load(f).get("eq", "normal")
