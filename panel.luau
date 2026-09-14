@@ -181,7 +181,15 @@ local function render()
         end
         table.insert(body, ui.row({ gap = 8 }, {
             ui.column({ gap = 3, flexGrow = 1 }, {
-                ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
+                ui.row({ align = "center", gap = 4 }, {
+                    ui.image({
+                        path = "icons/codec-" .. (st.codec ~= "" and st.codec or "sbc") .. iconSuffix(),
+                        width = 16,
+                        height = 16,
+                        fit = "contain",
+                    }),
+                    ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
+                }),
                 ui.select({
                     key = "codec_select",
                     options = codecOpts,
