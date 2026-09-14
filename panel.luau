@@ -184,8 +184,8 @@ local function render()
                 ui.row({ align = "center", gap = 4 }, {
                     ui.image({
                         path = "icons/codec-" .. (st.codec ~= "" and st.codec or "sbc") .. iconSuffix(),
-                        width = 40,
-                        height = 18,
+                        width = 80,
+                        height = 36,
                         fit = "contain",
                     }),
                     ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
