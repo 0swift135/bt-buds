@@ -16,24 +16,37 @@ STATE_DIR = os.path.expanduser("~/.local/state/bt-buds")
 EE_OUT = os.path.expanduser("~/.config/easyeffects/output")
 CUR_FILE = os.path.join(STATE_DIR, "eq.json")
 PRESETS = ["normal", "more_bass", "boost_vocals", "more_highs"]
+EE_SINK = "easyeffects_sink"
 
 
-def run(*args, timeout=20):
+def run(*args, timeout=15):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
+def daemon_alive():
+    try:
+        return run("pgrep", "-f", "easyeffects --service-mode").returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
 def ensure_daemon():
-    if run("pgrep", "-f", "easyeffects").returncode == 0:
+    if daemon_alive():
         return True
     if shutil.which("easyeffects") is None:
         return False
-    subprocess.Popen(["easyeffects", "--gapplication-service"],
+    subprocess.Popen(["easyeffects", "--service-mode"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(10):
+    for _ in range(15):
         time.sleep(1)
-        if run("pgrep", "-f", "easyeffects").returncode == 0:
-            return True
-    return False
+        if daemon_alive():
+            break
+    else:
+        return False
+    try:
+        return run("easyeffects", "-p").returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
 
 
 def ensure_preset(name):
@@ -43,6 +56,19 @@ def ensure_preset(name):
     if os.path.exists(src):
         shutil.copyfile(src, dst)
     return dst if os.path.exists(dst) else None
+
+
+def route_through_ee():
+    try:
+        if run("pactl", "get-default-sink").stdout.strip() != EE_SINK:
+            run("pactl", "set-default-sink", EE_SINK)
+        out = run("pactl", "list", "sink-inputs", "short").stdout
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] != EE_SINK:
+                run("pactl", "move-sink-input", parts[0], EE_SINK)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def save_cur(name):
@@ -73,10 +99,15 @@ def main(argv):
     if ensure_preset(name) is None:
         print("err preset-file")
         return 5
-    r = run("easyeffects", "-l", "btbuds-%s" % name)
+    try:
+        r = run("easyeffects", "-l", "btbuds-%s" % name)
+    except subprocess.TimeoutExpired:
+        print("err load-timeout")
+        return 6
     if r.returncode != 0:
         print("err load")
         return 6
+    route_through_ee()
     save_cur(name)
     print("ok %s" % name)
     return 0
