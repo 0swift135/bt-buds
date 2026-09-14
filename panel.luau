@@ -70,7 +70,7 @@ local function batteryColumn(iconName, label, level)
     local hasLevel = (tonumber(level) or -1) >= 0
     local text = hasLevel and (tostring(level) .. "%") or (label == tr("panel.case") and tr("panel.closed") or "--%")
     local low = hasLevel and (tonumber(level) or 100) <= 20
-    return ui.column({ align = "center", justify = "center", gap = 4, flexGrow = 1 }, {
+    return ui.column({ align = "center", justify = "center", gap = 3, flexGrow = 1 }, {
         ui.row({ align = "center", gap = 4 }, {
             ui.image({
                 path = "icons/" .. iconName .. iconSuffix(),
@@ -79,21 +79,22 @@ local function batteryColumn(iconName, label, level)
                 fit = "contain",
                 opacity = hasLevel and 0.85 or 0.4,
             }),
-            ui.label({ text = label, fontSize = 12, fontWeight = "medium", opacity = 0.7 }),
+            ui.label({ text = label, fontSize = 11, fontWeight = "medium", opacity = 0.7, maxLines = 1 }),
         }),
         ui.label({
             text = text,
-            fontSize = 15,
+            fontSize = 14,
             fontWeight = "bold",
             color = low and "error" or nil,
             textAlign = "center",
+            maxLines = 1,
         }),
         ui.progress({
             progress = levelFraction(level),
             height = 4,
             radius = 2,
             fill = low and "error" or "primary",
-            width = 76,
+            width = 64,
         }),
     })
 end
@@ -112,11 +113,11 @@ local function render()
     local body = {}
 
     if connected then
-        table.insert(body, ui.row({ align = "center", justify = "center", padding = 2 }, {
-            ui.image({ path = "icons/buds.png", width = 200, height = 154, fit = "contain" }),
+        table.insert(body, ui.row({ align = "center", justify = "center", padding = 0 }, {
+            ui.image({ path = "icons/buds.png", width = 160, height = 123, fit = "contain" }),
         }))
 
-        table.insert(body, ui.row({ align = "center", justify = "center", gap = 12, padding = 4 }, {
+        table.insert(body, ui.row({ align = "center", justify = "center", gap = 8, padding = 2 }, {
             batteryColumn("earbud-left", tr("panel.left"), st.bat_l),
             batteryColumn("case", tr("panel.case"), st.bat_c),
             batteryColumn("earbud-right", tr("panel.right"), st.bat_r),
@@ -125,9 +126,9 @@ local function render()
         table.insert(body, ui.separator({ thickness = 1 }))
 
         local currentMode = st.mode or "off"
-        table.insert(body, ui.column({ gap = 4 }, {
+        table.insert(body, ui.column({ gap = 3 }, {
             ui.label({ text = tr("panel.noise_control"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
-            ui.column({ gap = 3 }, {
+            ui.column({ gap = 2 }, {
                 ui.button({
                     key = "mode-anc",
                     text = tr("panel.mode.anc"),
@@ -168,7 +169,7 @@ local function render()
                 break
             end
         end
-        table.insert(body, ui.column({ gap = 4 }, {
+        table.insert(body, ui.column({ gap = 3 }, {
             ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
             ui.select({
                 key = "codec_select",
@@ -189,8 +190,8 @@ local function render()
             }),
         }))
     else
-        table.insert(body, ui.column({ align = "center", gap = 12, padding = 24 }, {
-            ui.glyph({ name = "bluetooth-off", color = "error", size = 48 }),
+        table.insert(body, ui.column({ align = "center", gap = 8, padding = 16 }, {
+            ui.glyph({ name = "bluetooth-off", color = "error", size = 40 }),
             ui.label({ text = tr("panel.disconnected"), fontSize = 15, fontWeight = "bold", textAlign = "center" }),
             ui.button({
                 glyph = "dot",
@@ -215,9 +216,9 @@ local function render()
 
     panel.render(ui.column({ flexGrow = 1, gap = 4, padding = 0, width = 340, height = 620 }, {
         ui.row({ align = "center", justify = "space_between", gap = 8 }, {
-            ui.glyph({ name = "bluetooth", color = "primary", size = 30 }),
+            ui.glyph({ name = "bluetooth", color = "primary", size = 26 }),
             ui.column({ flexGrow = 1, gap = 2 }, {
-                ui.label({ text = "Redmi Buds 6 Lite", fontSize = 15, fontWeight = "bold", maxLines = 1 }),
+                ui.label({ text = "Redmi Buds 6 Lite", fontSize = 14, fontWeight = "bold", maxLines = 1 }),
                 ui.label({ text = statusText, fontSize = 11, color = connected and "secondary" or nil, maxLines = 1 }),
                 ui.row({ align = "center", gap = 4 }, {
                     ui.glyph({ name = modeGlyph, size = 14 }),
@@ -231,7 +232,7 @@ local function render()
             }),
             ui.button({ glyph = "close", variant = "ghost", onClick = "onCloseClicked" }),
         }),
-        ui.column({ flexGrow = 1, gap = 10 }, body),
+        ui.column({ flexGrow = 1, gap = 6 }, body),
         ui.row({ justify = "end" }, {
             ui.button({
                 glyph = "world",
