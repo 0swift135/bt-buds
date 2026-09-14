@@ -1,81 +1,79 @@
-# bt-buds
+# BT Buds
 
-Noctalia (v5+) bar widget + panel + service for **Redmi Buds 6 Lite** over Bluetooth:
-live battery (L/R/case), ANC / transparency / off modes, Bluetooth codec switch,
-and a real 5-band software EQ powered by ffmpeg — all from the bar.
+Bar widget, floating panel and background service for **Redmi Buds 6 Lite**
+over Bluetooth: live battery (left/right/case), ANC / transparency / off modes,
+Bluetooth codec switch (SBC / SBC-XQ / AAC) and a real software EQ — all from
+the bar.
 
-## Features
+## Plugin
 
-- **Bar widget** — connection glyph, name / battery / mode pages (right-click),
-  middle-click cycles ANC → transparency → off, tooltip with codec, mode and battery
-- **Panel (340×620)** — hero image, battery columns with bars, noise-control
-  buttons, codec select (SBC / SBC-XQ / AAC), EQ select, connect/disconnect,
-  RU/EN language switch
-- **Real EQ** — apps → `eq_in` null sink → ffmpeg DSP → buds; presets:
-  Normal (flat), More Bass (+7 dB lowshelf), Boost Vocals, More Highs.
-  Measured: +5.6 dB @ 100 Hz, +4.6 dB @ 8 kHz
-- **Sound effects** on mode/language switch (freedesktop stereo sounds)
-- **Persistent RFCOMM daemon** (ch 29) — one session, instant mode/battery
-  commands over a unix socket (no EBUSY races)
+| Field | Value |
+| --- | --- |
+| ID | `jswift/bt-buds` |
+| Entries | Bar widget: `widget`; panel: `panel`; service: `service` |
 
 ## Requirements
 
-- Noctalia 5.1+ (plugin API 21)
-- `python3` (stdlib only), `ffmpeg` (with `ffplay` for sounds), `pactl` (PipeWire)
-- Redmi Buds 6 Lite paired via Bluetooth (RFCOMM channel 29)
+Install `python3`, `ffmpeg` (provides `ffplay` for sound effects), `pactl`
+(PipeWire) and `bluetoothctl` on `PATH`.
 
-> The buds MAC is currently hardcoded in `buds-daemon.py`
-> (`MAC = "78:99:87:AD:44:BA"`). Change it there for another headset.
+Hardware: a paired Redmi Buds 6 Lite (RFCOMM channel 29). The buds MAC is
+currently hardcoded in `buds-daemon.py` (`MAC = "78:99:87:AD:44:BA"`) — change
+it there for another headset. Also start the bundled daemon once:
 
-## Install
-
-```bash
-git clone https://github.com/0swift135/bt-buds.git ~/.local/share/noctalia/plugins/bt-buds
-cp ~/.local/share/noctalia/plugins/bt-buds/buds-daemon.service ~/.config/systemd/user/
+```sh
+cp buds-daemon.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now buds-daemon.service
-noctalia msg plugins enable jswift/bt-buds
 ```
 
 ## Usage
 
-- **Left click** widget — open panel · **Right click** — name/battery/mode page ·
-  **Middle click** — cycle ANC/TR/off
-- **Panel** — noise-control buttons call `mode.py`, codec select calls
-  `pactl set-card-profile` (the EQ chain is rebuilt automatically afterwards),
-  EQ select calls `eq.py set <preset>`
-- **Language** — globe button cycles Auto → RU → EN
+- **Left click** the widget — open/close the panel, or any time via:
 
-## How it works
-
-```
-apps ──► eq_in (module-null-sink) ──► ffmpeg (bass/treble/peaking) ──► bluez buds
-                                            ▲
-panel ──► service.luau ──► eq.py set/get ──┘         (ok <preset> / err <reason>)
-
-panel ──► service.luau ──► mode.py / battery.py ──► buds-daemon (unix sock) ──► RFCOMM ch29
+```sh
+noctalia msg panel-toggle jswift/bt-buds:panel
 ```
 
-- `eq.py` finds the `bluez_output.*` sink dynamically, pins ffmpeg's output to
-  it (avoids feedback loop into `eq_in`), and routes app streams into `eq_in`.
-  Runs in ~1.5 s to fit the plugin worker timeout; carries its own
-  `XDG_RUNTIME_DIR`/`DBUS` env because the sandbox provides none.
-- Codec profile switches destroy and recreate the bluez sink, so the service
-  rebuilds the EQ chain after every switch.
+- **Right click** the widget — cycle name / battery / mode pages.
+  **Middle click** — cycle ANC → transparency → off without opening the panel.
+- **Panel** — noise-control buttons (ANC/transparency/off), battery columns,
+  codec select, EQ select (Normal / More bass / Vocals / Highs),
+  connect/disconnect buttons and the RU/EN language switch.
+- The widget tooltip shows codec, mode and battery.
 
-## Files
+## Settings
 
-| File | Role |
-|---|---|
-| `service.luau` | state, IPC (`refresh/hold/toggle/set_mode/cycle_mode/set_codec/cycle_codec/set_eq/cycle_eq/cycle_lang`) |
-| `panel.luau` | floating panel UI (EN/RU via `translations/`) |
-| `widget.luau` | bar widget + tooltip + gestures |
-| `eq.py` | ffmpeg EQ chain manager (`set`/`get`) |
-| `buds-daemon.py` | persistent RFCOMM session + unix-socket server |
-| `buds-daemon.service` | systemd user unit for the daemon |
-| `buds_proto.py` | Xiaomi framing/auth/battery protocol |
-| `mode.py` / `battery.py` | thin daemon clients |
-| `plugin.toml` | manifest (panel 340×620) |
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `language` | `select` | `auto` | Panel/widget language: follow shell (`auto`), English (`en`) or Russian (`ru`). |
+
+## IPC
+
+```sh
+noctalia msg plugin jswift/bt-buds:service all <event> [payload]
+```
+
+| Event | Payload | Effect |
+| --- | --- | --- |
+| `refresh` / `hold` | — | re-read connection, codec, mode, battery, EQ |
+| `toggle` | — | bluetooth connect/disconnect the buds |
+| `set_mode` / `cycle_mode` | `anc`/`transparency`/`off` | listening mode via the RFCOMM daemon |
+| `set_codec` / `cycle_codec` | `sbc`/`sbc_xq`/`aac` | A2DP profile via `pactl`; the EQ chain is rebuilt afterwards |
+| `set_eq` / `cycle_eq` | `normal`/`more_bass`/`boost_vocals`/`more_highs` | restart the ffmpeg DSP chain with the preset |
+
+## Notes
+
+- **How EQ works**: apps are moved to the `eq_in` null sink, an `ffmpeg`
+  process applies bass/treble/peaking filters and plays into the buds sink.
+  Switching presets restarts ffmpeg (~3 s of silence); PipeWire latency adds a
+  small A/V offset, fine for music.
+- **Files written** under `~/.local/state/bt-buds/`: `mode.json`, `lang`,
+  `eq.json`, `eq-ffmpeg.pid`, `ctl.sock` (daemon socket).
+- **Processes spawned**: `python3` helpers, `pactl`, `bluetoothctl`,
+  `ffmpeg`, `ffplay` (UI sounds). No network access.
+- If the buds disconnect and reconnect, press any EQ/mode control once — the
+  audio chain re-pins itself to the new sink.
 
 ## License
 

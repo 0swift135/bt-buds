@@ -6,7 +6,8 @@ author = "jswift"
 license = "MIT"
 icon = "bluetooth"
 description = "Bluetooth headset on the bar: battery, ANC, codec, EQ via ffmpeg."
-tags = ["bluetooth", "audio", "bar"]
+tags = ["audio", "bar", "panel", "service", "hardware", "indicator"]
+dependencies = ["python3", "ffmpeg", "pactl", "bluetoothctl"]
 
 [[setting]]
 key = "language"
