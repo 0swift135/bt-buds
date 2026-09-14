@@ -169,9 +169,19 @@ local function render()
                 break
             end
         end
-        table.insert(body, ui.column({ gap = 3 }, {
-            ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
-            ui.row({ align = "center", gap = 8 }, {
+        local eqOpts = { "normal", "more_bass", "boost_vocals", "more_highs" }
+        local eqLabels = {}
+        for i, k in ipairs(eqOpts) do eqLabels[i] = tr("panel.eq." .. k) end
+        local eqIndex = 0
+        for i, k in ipairs(eqOpts) do
+            if st.eq_preset == k then
+                eqIndex = i - 1
+                break
+            end
+        end
+        table.insert(body, ui.row({ gap = 8 }, {
+            ui.column({ gap = 3, flexGrow = 1 }, {
+                ui.label({ text = tr("panel.codec"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
                 ui.select({
                     key = "codec_select",
                     options = codecOpts,
@@ -183,11 +193,19 @@ local function render()
                         end
                     end,
                 }),
-                ui.button({
-                    glyph = "dot",
-                    variant = "ghost",
-                    tooltip = tr("panel.equalizer") .. ": " .. (st.eq_preset or "-"),
-                    onClick = function() dispatch_ipc("cycle_eq") end,
+            }),
+            ui.column({ gap = 3, flexGrow = 1 }, {
+                ui.label({ text = tr("panel.equalizer"), fontSize = 11, fontWeight = "bold", opacity = 0.7 }),
+                ui.select({
+                    key = "eq_select",
+                    options = eqLabels,
+                    selectedIndex = eqIndex,
+                    onChange = function(idx)
+                        local n = math.floor(tonumber(idx) or 0) + 1
+                        if eqOpts[n] then
+                            dispatch_ipc("set_eq", eqOpts[n])
+                        end
+                    end,
                 }),
             }),
         }))

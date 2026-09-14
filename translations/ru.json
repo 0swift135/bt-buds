@@ -14,7 +14,13 @@
     "connect": "Подключить",
     "disconnect": "Отключить",
     "disconnected": "Отключено",
-    "equalizer": "Эквалайзер"
+    "equalizer": "Эквалайзер",
+    "eq": {
+      "normal": "Нормально",
+      "more_bass": "Басс",
+      "boost_vocals": "Голос",
+      "more_highs": "Высокие"
+    }
   },
   "widget": {
     "name": "Buds 6 Lite",

@@ -12,6 +12,12 @@
     },
     "codec": "Codec",
 "equalizer": "EQ",
+    "eq": {
+      "normal": "Normal",
+      "more_bass": "More bass",
+      "boost_vocals": "Vocals",
+      "more_highs": "Highs"
+    },
     "connect": "Connect",
     "disconnect": "Disconnect",
     "disconnected": "Disconnected"

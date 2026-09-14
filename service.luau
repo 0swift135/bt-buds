@@ -151,6 +151,20 @@ function onIpc(event, _payload)
                 publish()
             end
         end)
+    elseif event == "set_eq" then
+        if not snap.connected then return end
+        local want = (_payload == "more_bass" or _payload == "boost_vocals" or _payload == "more_highs") and _payload or "normal"
+        noctalia.runAsync("python3 " .. PLUGIN_DIR .. "/eq.py set " .. want, function(result)
+            local out = (result and result.stdout) or ""
+            local v = out:match("ok%s+(%w+)")
+            if result and result.exitCode == 0 and v then
+                for i, p in ipairs(EQ_PRESETS) do
+                    if p == v then eq_index = i break end
+                end
+                snap.eq_preset = v
+                publish()
+            end
+        end)
     elseif event == "set_mode" then
         if not snap.connected then return end
         local want = (_payload == "anc" or _payload == "transparency") and _payload or "off"
